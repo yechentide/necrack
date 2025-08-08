@@ -98,14 +98,17 @@ func DecryptHandler(w http.ResponseWriter, r *http.Request) {
 
 	logger.Info("Found world directories", "count", len(worldDirs), "directories", worldDirs)
 
+	decryptedDirs := make([]string, 0, len(worldDirs))
 	for _, worldDir := range worldDirs {
 		logger.Info("Decrypting world", "world_dir", worldDir)
-		if err := netease.DecryptWorldDB(worldDir); err != nil {
+		decryptedDir, err := netease.DecryptWorldDB(worldDir)
+		if err != nil {
 			logger.Error("Failed to decrypt world", "world_dir", worldDir, "error", err)
 			http.Error(w, fmt.Sprintf("Failed to decrypt world: %v", err), http.StatusInternalServerError)
 			return
 		}
-		logger.Info("World decrypted successfully", "world_dir", worldDir)
+		decryptedDirs = append(decryptedDirs, decryptedDir)
+		logger.Info("World decrypted successfully", "world_dir", worldDir, "decrypted_dir", decryptedDir)
 	}
 
 	outputZipPath := filepath.Join(tempDir, "decrypted.zip")

@@ -46,15 +46,17 @@ Example:
 
 		logger.Info("World directory found, starting decryption process")
 
-		if err := netease.DecryptWorldDB(worldDir); err != nil {
+		decryptedDir, err := netease.DecryptWorldDB(worldDir)
+		if err != nil {
 			logger.Error("Decryption failed", "world_dir", worldDir, "error", err)
 			fmt.Fprintf(os.Stderr, "❌ Error: %v\n", err)
 			os.Exit(1)
 		}
 
 		duration := time.Since(start)
-		logger.Info("Decryption completed successfully", "world_dir", worldDir, "duration", duration)
+		logger.Info("Decryption completed successfully", "world_dir", worldDir, "decrypted_dir", decryptedDir, "duration", duration)
 		fmt.Println(styles.SuccessStyle.Render("✅ Decryption completed successfully!"))
+		fmt.Printf("📁 Decrypted world saved to: %s\n", styles.PathStyle.Render(decryptedDir))
 		fmt.Printf("⏱️  Completed in %v\n", duration)
 	},
 }

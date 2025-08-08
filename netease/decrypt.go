@@ -2,9 +2,11 @@ package netease
 
 import (
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 func DecryptFile(filePath string, key []byte) ([]byte, error) {
@@ -23,18 +25,29 @@ func DecryptFile(filePath string, key []byte) ([]byte, error) {
 	return decrypted, nil
 }
 
-func DecryptWorldDB(worldDir string) error {
+func DecryptWorldDB(worldDir string) (string, error) {
 	dbDir := filepath.Join(worldDir, "db")
 	if _, err := os.Stat(dbDir); os.IsNotExist(err) {
-		return fmt.Errorf("db directory not found in %s", worldDir)
+		return "", fmt.Errorf("db directory not found in %s", worldDir)
 	}
 
-	key, err := DeriveKey(dbDir)
+	// Create a copy of the world directory
+	timestamp := time.Now().Format("20060102_150405")
+	worldDirName := filepath.Base(worldDir)
+	copyDir := filepath.Join(filepath.Dir(worldDir), worldDirName+"_decrypted_"+timestamp)
+	
+	if err := copyDirectory(worldDir, copyDir); err != nil {
+		return "", fmt.Errorf("failed to copy world directory: %w", err)
+	}
+
+	// Work on the copied directory
+	copyDbDir := filepath.Join(copyDir, "db")
+	key, err := DeriveKey(copyDbDir)
 	if err != nil {
-		return fmt.Errorf("failed to derive key: %w", err)
+		return "", fmt.Errorf("failed to derive key: %w", err)
 	}
 
-	err = filepath.WalkDir(dbDir, func(path string, d fs.DirEntry, err error) error {
+	err = filepath.WalkDir(copyDbDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -58,20 +71,67 @@ func DecryptWorldDB(worldDir string) error {
 			return fmt.Errorf("failed to decrypt file %s: %w", path, err)
 		}
 
-		outputPath := path + ".decrypted"
-		if err := os.WriteFile(outputPath, decrypted, 0644); err != nil {
-			return fmt.Errorf("failed to write decrypted file %s: %w", outputPath, err)
+		// Overwrite the original file in the copy with decrypted data
+		if err := os.WriteFile(path, decrypted, 0644); err != nil {
+			return fmt.Errorf("failed to write decrypted file %s: %w", path, err)
 		}
 
-		fmt.Printf("Decrypted: %s -> %s\n", path, outputPath)
+		fmt.Printf("Decrypted: %s\n", path)
 		return nil
 	})
 
 	if err != nil {
-		return fmt.Errorf("failed to process db directory: %w", err)
+		return "", fmt.Errorf("failed to process db directory: %w", err)
 	}
 
-	return nil
+	return copyDir, nil
+}
+
+func copyDirectory(src, dst string) error {
+	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		relPath, err := filepath.Rel(src, path)
+		if err != nil {
+			return fmt.Errorf("failed to get relative path: %w", err)
+		}
+
+		dstPath := filepath.Join(dst, relPath)
+
+		if d.IsDir() {
+			return os.MkdirAll(dstPath, 0755)
+		}
+
+		srcFile, err := os.Open(path)
+		if err != nil {
+			return fmt.Errorf("failed to open source file %s: %w", path, err)
+		}
+		defer srcFile.Close()
+
+		if err := os.MkdirAll(filepath.Dir(dstPath), 0755); err != nil {
+			return fmt.Errorf("failed to create directory %s: %w", filepath.Dir(dstPath), err)
+		}
+
+		dstFile, err := os.Create(dstPath)
+		if err != nil {
+			return fmt.Errorf("failed to create destination file %s: %w", dstPath, err)
+		}
+		defer dstFile.Close()
+
+		srcInfo, err := srcFile.Stat()
+		if err != nil {
+			return fmt.Errorf("failed to get source file info: %w", err)
+		}
+
+		_, err = io.Copy(dstFile, srcFile)
+		if err != nil {
+			return fmt.Errorf("failed to copy file content: %w", err)
+		}
+
+		return os.Chmod(dstPath, srcInfo.Mode())
+	})
 }
 
 func xorDecrypt(data []byte, key []byte) []byte {
