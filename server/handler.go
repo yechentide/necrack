@@ -8,40 +8,61 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/yechentide/necrack/netease"
 )
 
 func DecryptHandler(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	requestID := generateRequestID()
+	logger := log.With("request_id", requestID, "client_ip", r.RemoteAddr)
+
+	logger.Info("Processing decrypt request", "method", r.Method, "path", r.URL.Path)
+
 	if r.Method != http.MethodPost {
+		logger.Warn("Invalid method used", "method", r.Method)
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	err := r.ParseMultipartForm(32 << 20) // 32 MB max
 	if err != nil {
+		logger.Error("Failed to parse multipart form", "error", err)
 		http.Error(w, "Failed to parse form", http.StatusBadRequest)
 		return
 	}
 
 	file, header, err := r.FormFile("zipfile")
 	if err != nil {
+		logger.Error("Failed to get uploaded file", "error", err)
 		http.Error(w, "Failed to get uploaded file", http.StatusBadRequest)
 		return
 	}
 	defer file.Close()
 
+	logger.Info("File uploaded", "filename", header.Filename, "size", header.Size)
+
 	if !strings.HasSuffix(strings.ToLower(header.Filename), ".zip") {
+		logger.Warn("Invalid file extension", "filename", header.Filename)
 		http.Error(w, "File must be a ZIP archive", http.StatusBadRequest)
 		return
 	}
 
 	tempDir, err := os.MkdirTemp("", "necrack-*")
 	if err != nil {
+		logger.Error("Failed to create temp directory", "error", err)
 		http.Error(w, "Failed to create temp directory", http.StatusInternalServerError)
 		return
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		if cleanErr := os.RemoveAll(tempDir); cleanErr != nil {
+			logger.Warn("Failed to clean temp directory", "temp_dir", tempDir, "error", cleanErr)
+		}
+	}()
+
+	logger.Debug("Created temp directory", "temp_dir", tempDir)
 
 	tempZipPath := filepath.Join(tempDir, "input.zip")
 	tempZipFile, err := os.Create(tempZipPath)
@@ -70,15 +91,21 @@ func DecryptHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(worldDirs) == 0 {
+		logger.Warn("No world directories found in ZIP")
 		http.Error(w, "No world directories found in ZIP", http.StatusBadRequest)
 		return
 	}
 
+	logger.Info("Found world directories", "count", len(worldDirs), "directories", worldDirs)
+
 	for _, worldDir := range worldDirs {
+		logger.Info("Decrypting world", "world_dir", worldDir)
 		if err := netease.DecryptWorldDB(worldDir); err != nil {
+			logger.Error("Failed to decrypt world", "world_dir", worldDir, "error", err)
 			http.Error(w, fmt.Sprintf("Failed to decrypt world: %v", err), http.StatusInternalServerError)
 			return
 		}
+		logger.Info("World decrypted successfully", "world_dir", worldDir)
 	}
 
 	outputZipPath := filepath.Join(tempDir, "decrypted.zip")
@@ -97,11 +124,19 @@ func DecryptHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer outputFile.Close()
 
-	_, err = io.Copy(w, outputFile)
+	bytesWritten, err := io.Copy(w, outputFile)
 	if err != nil {
+		logger.Error("Failed to send response", "error", err)
 		http.Error(w, "Failed to send response", http.StatusInternalServerError)
 		return
 	}
+
+	logger.Info("Request completed successfully",
+		"filename", header.Filename,
+		"worlds_processed", len(worldDirs),
+		"response_size", bytesWritten,
+		"duration", time.Since(start),
+	)
 }
 
 func extractZip(src, dest string) error {
@@ -224,4 +259,8 @@ func findWorldDirectories(root string) ([]string, error) {
 	})
 
 	return worldDirs, err
+}
+
+func generateRequestID() string {
+	return fmt.Sprintf("%d", time.Now().UnixNano())
 }

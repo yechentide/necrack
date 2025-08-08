@@ -2,11 +2,12 @@ package cmd
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 
+	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 	"github.com/yechentide/necrack/server"
+	"github.com/yechentide/necrack/styles"
 )
 
 var serverCmd = &cobra.Command{
@@ -25,6 +26,16 @@ Example:
   curl -X POST -F "zipfile=@world.zip" http://localhost:8080/decrypt -o decrypted.zip`,
 	Run: func(cmd *cobra.Command, args []string) {
 		port, _ := cmd.Flags().GetInt("port")
+		
+		// Setup styled output from centralized styles
+		
+		// Setup logger
+		logger := log.NewWithOptions(nil, log.Options{
+			ReportTimestamp: true,
+			TimeFormat:      "15:04:05",
+			Prefix:          "[necrack-server]",
+		})
+		log.SetDefault(logger)
 		
 		http.HandleFunc("/decrypt", server.DecryptHandler)
 		
@@ -76,11 +87,25 @@ Example:
 		})
 
 		addr := fmt.Sprintf(":%d", port)
-		fmt.Printf("Starting server on http://localhost%s\n", addr)
-		fmt.Printf("Upload endpoint: http://localhost%s/decrypt\n", addr)
+		
+		// Display startup information with styling
+		fmt.Println(styles.ServerHeaderStyle.Render("🌍 NetEase World Decryption Server"))
+		fmt.Println()
+		fmt.Printf("%s %s\n", 
+			styles.InfoStyle.Render("⚡ Server starting on:"), 
+			styles.URLStyle.Render(fmt.Sprintf("http://localhost:%d", port)))
+		fmt.Printf("%s %s\n", 
+			styles.InfoStyle.Render("📤 Upload endpoint:"), 
+			styles.URLStyle.Render(fmt.Sprintf("http://localhost:%d/decrypt", port)))
+		fmt.Printf("%s %s\n", 
+			styles.InfoStyle.Render("💚 Health check:"), 
+			styles.URLStyle.Render(fmt.Sprintf("http://localhost:%d/health", port)))
+		fmt.Println()
+		
+		logger.Info("Server starting", "port", port, "addr", addr)
 		
 		if err := http.ListenAndServe(addr, nil); err != nil {
-			log.Fatalf("Server failed to start: %v", err)
+			logger.Fatal("Server failed to start", "error", err)
 		}
 	},
 }

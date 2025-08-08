@@ -3,9 +3,12 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 	"github.com/yechentide/necrack/netease"
+	"github.com/yechentide/necrack/styles"
 )
 
 var encodeCmd = &cobra.Command{
@@ -22,35 +25,64 @@ Example:
   necrack encode leveldb_file.ldb 1a2b3c4d5e6f7a8b`,
 	Args: cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
+		start := time.Now()
 		filePath := args[0]
 		keyHex := args[1]
+		
+		// Setup styled output from centralized styles
+		
+		// Setup logger
+		logger := log.NewWithOptions(nil, log.Options{
+			ReportTimestamp: true,
+			TimeFormat:      "15:04:05",
+			Prefix:          "[encode]",
+		})
+		
+		logger.Info("Starting file encryption", "file_path", filePath, "key_length", len(keyHex))
+		
+		fmt.Println(styles.EncodeHeaderStyle.Render("🔒 NetEase File Encryption"))
+		fmt.Printf("File: %s\n", styles.PathStyle.Render(filePath))
+		fmt.Printf("Key:  %s\n\n", styles.KeyStyle.Render(keyHex))
 
 		if _, err := os.Stat(filePath); os.IsNotExist(err) {
-			fmt.Fprintf(os.Stderr, "Error: File '%s' does not exist\n", filePath)
+			logger.Error("File does not exist", "file_path", filePath)
+			fmt.Fprintf(os.Stderr, "❌ Error: File '%s' does not exist\n", filePath)
 			os.Exit(1)
 		}
 
 		key, err := netease.ParseHexKey(keyHex)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: Invalid key format: %v\n", err)
+			logger.Error("Invalid key format", "key_hex", keyHex, "error", err)
+			fmt.Fprintf(os.Stderr, "❌ Error: Invalid key format: %v\n", err)
 			os.Exit(1)
 		}
 
-		fmt.Printf("Encrypting file: %s\n", filePath)
+		logger.Info("Key parsed successfully, starting encryption")
 
 		encrypted, err := netease.EncryptFile(filePath, key)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			logger.Error("Encryption failed", "file_path", filePath, "error", err)
+			fmt.Fprintf(os.Stderr, "❌ Error: %v\n", err)
 			os.Exit(1)
 		}
 
 		outputPath := filePath + ".encrypted"
 		if err := os.WriteFile(outputPath, encrypted, 0644); err != nil {
-			fmt.Fprintf(os.Stderr, "Error writing encrypted file: %v\n", err)
+			logger.Error("Failed to write encrypted file", "output_path", outputPath, "error", err)
+			fmt.Fprintf(os.Stderr, "❌ Error writing encrypted file: %v\n", err)
 			os.Exit(1)
 		}
 
-		fmt.Printf("Encryption completed: %s -> %s\n", filePath, outputPath)
+		duration := time.Since(start)
+		logger.Info("Encryption completed successfully", 
+			"input_file", filePath,
+			"output_file", outputPath,
+			"file_size", len(encrypted),
+			"duration", duration)
+		
+		fmt.Println(styles.SuccessStyle.Render("✅ Encryption completed successfully!"))
+		fmt.Printf("📄 Output: %s\n", styles.PathStyle.Render(outputPath))
+		fmt.Printf("⏱️  Completed in %v\n", duration)
 	},
 }
 
