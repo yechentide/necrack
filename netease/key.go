@@ -26,12 +26,11 @@ func DeriveKey(dbDir string) ([]byte, error) {
 
 	currentBody := currentData[4:]
 
-	// Add newline to manifestName
-	manifestWithNewline := append(manifestName, '\n')
-
-	if len(manifestWithNewline) != 16 {
-		return nil, fmt.Errorf("manifest name with newline must be exactly 16 bytes, got %d", len(manifestWithNewline))
+	manifestBytes := manifestName
+	if len(manifestBytes) < 16 {
+		manifestBytes = append(manifestBytes, bytes.Repeat([]byte{'\n'}, 16-len(manifestBytes))...)
 	}
+	manifestBytes = manifestBytes[:16]
 
 	if len(currentBody) < 16 {
 		return nil, fmt.Errorf("current body must be at least 16 bytes, got %d", len(currentBody))
@@ -39,7 +38,7 @@ func DeriveKey(dbDir string) ([]byte, error) {
 
 	keyRaw := make([]byte, 16)
 	for i := 0; i < 16; i++ {
-		keyRaw[i] = currentBody[i] ^ manifestWithNewline[i]
+		keyRaw[i] = currentBody[i] ^ manifestBytes[i]
 	}
 
 	first8 := keyRaw[:8]
