@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/charmbracelet/log"
@@ -23,18 +24,18 @@ Example:
 	Run: func(cmd *cobra.Command, args []string) {
 		start := time.Now()
 		worldDir := args[0]
-		
+
 		// Setup styled output from centralized styles
-		
+
 		// Setup logger
 		logger := log.NewWithOptions(nil, log.Options{
 			ReportTimestamp: true,
 			TimeFormat:      "15:04:05",
 			Prefix:          "[decode]",
 		})
-		
+
 		logger.Info("Starting world decryption", "world_dir", worldDir)
-		
+
 		fmt.Println(styles.DecodeHeaderStyle.Render("🔓 NetEase World Decryption"))
 		fmt.Printf("Target: %s\n\n", styles.PathStyle.Render(worldDir))
 
@@ -57,6 +58,7 @@ Example:
 		logger.Info("Decryption completed successfully", "world_dir", worldDir, "decrypted_dir", decryptedDir, "duration", duration)
 		fmt.Println(styles.SuccessStyle.Render("✅ Decryption completed successfully!"))
 		fmt.Printf("📁 Decrypted world saved to: %s\n", styles.PathStyle.Render(decryptedDir))
+		fmt.Printf("🔑 Key saved to: %s\n", styles.PathStyle.Render(filepath.Join(decryptedDir, netease.KeyFileName)))
 		fmt.Printf("⏱️  Completed in %v\n", duration)
 	},
 }

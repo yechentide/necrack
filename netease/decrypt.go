@@ -1,6 +1,7 @@
 package netease
 
 import (
+	"encoding/hex"
 	"fmt"
 	"io"
 	"io/fs"
@@ -8,6 +9,8 @@ import (
 	"path/filepath"
 	"time"
 )
+
+const KeyFileName = "netease.key"
 
 func DecryptFile(filePath string, key []byte) ([]byte, error) {
 	data, err := os.ReadFile(filePath)
@@ -35,7 +38,7 @@ func DecryptWorldDB(worldDir string) (string, error) {
 	timestamp := time.Now().Format("20060102_150405")
 	worldDirName := filepath.Base(worldDir)
 	copyDir := filepath.Join(filepath.Dir(worldDir), worldDirName+"_decrypted_"+timestamp)
-	
+
 	if err := copyDirectory(worldDir, copyDir); err != nil {
 		return "", fmt.Errorf("failed to copy world directory: %w", err)
 	}
@@ -45,6 +48,11 @@ func DecryptWorldDB(worldDir string) (string, error) {
 	key, err := DeriveKey(copyDbDir)
 	if err != nil {
 		return "", fmt.Errorf("failed to derive key: %w", err)
+	}
+
+	keyPath := filepath.Join(copyDir, KeyFileName)
+	if err := os.WriteFile(keyPath, []byte(hex.EncodeToString(key)+"\n"), 0600); err != nil {
+		return "", fmt.Errorf("failed to save key file: %w", err)
 	}
 
 	err = filepath.WalkDir(copyDbDir, func(path string, d fs.DirEntry, err error) error {
